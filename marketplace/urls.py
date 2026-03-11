@@ -13,6 +13,8 @@ from .views import (
     fee_top_transactions,
     save_dashboard_report,
     save_fees_report,
+    export_dashboard_report_csv,
+    export_fees_report_csv,
 )
 
 router = DefaultRouter()
@@ -27,8 +29,10 @@ urlpatterns = [
     path('dashboard/timeseries/', dashboard_timeseries, name='dashboard-timeseries'),
     path('dashboard/', dashboard_data, name='dashboard-data'),
     path('dashboard/save-report/', save_dashboard_report, name='save-dashboard-report'),
+    path('dashboard/export-report/', export_dashboard_report_csv, name='export-dashboard-report'),
     path('fees/statistics/', fee_statistics, name='fees-statistics'),
     path('fees/top-transactions/', fee_top_transactions, name='fees-top-transactions'),
     path('fees/save-report/', save_fees_report, name='save-fees-report'),
+    path('fees/export-report/', export_fees_report_csv, name='export-fees-report'),
 ]
 
