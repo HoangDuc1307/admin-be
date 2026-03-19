@@ -27,12 +27,15 @@ $env:DJANGO_SECRET_KEY="replace-me"
 
 - Hoặc tạo file `.env` dựa theo `.env.example` (file này đã được ignore, không push lên GitHub).
 
-Chạy migrate + tạo admin:
-
 ```bash
 python manage.py migrate
-python manage.py createsuperuser
 ```
+
+- **Nạp dữ liệu mẫu (Rất quan trọng):**
+```bash
+python manage.py setup_project_data
+```
+*(Tài khoản mặc định sau khi chạy: **admin / admin123**)*
 
 Chạy server:
 

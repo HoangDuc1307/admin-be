@@ -17,7 +17,47 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 
-from ..models import Listing, Transaction, AdminReportSnapshot
+from ..models import Listing, Transaction, AdminReportSnapshot, UserReport
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def admin_notifications(request):
+    """
+    API cung cấp số lượng thông báo cho Admin (dành cho đồ án).
+    - Đếm số bài đăng đang chờ duyệt (PENDING)
+    - Đếm số báo cáo người dùng đang mở (OPEN)
+    """
+    # Đếm các bài đăng sản phẩm chưa được duyệt
+    pending_listings_count = Listing.objects.filter(status='PENDING').count()
+    
+    # Đếm các báo cáo tố cáo người dùng chưa được xử lý
+    open_reports_count = UserReport.objects.filter(status='OPEN').count()
+    
+    # Tạo danh sách các thông báo cụ thể để hiển thị trên menu chuông
+    notifications = []
+    
+    if pending_listings_count > 0:
+        notifications.append({
+            'title': 'Bài đăng mới',
+            'message': f'Có {pending_listings_count} bài đăng đang chờ bạn phê duyệt.',
+            'time': 'Vừa xong',
+            'type': 'LISTING',
+            'link': '/pages/listings'
+        })
+        
+    if open_reports_count > 0:
+        notifications.append({
+            'title': 'Báo cáo vi phạm',
+            'message': f'Có {open_reports_count} báo cáo cần xem xét ngay.',
+            'time': 'Vừa xong',
+            'type': 'REPORT',
+            'link': '/pages/reports'
+        })
+
+    return Response({
+        'unread_count': pending_listings_count + open_reports_count,
+        'items': notifications
+    })
 
 
 @api_view(['POST'])

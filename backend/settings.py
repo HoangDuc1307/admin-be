@@ -28,16 +28,14 @@ DEBUG = True
 
 ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
 
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:4200",
-    "http://127.0.0.1:4200",
-]
-
+CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
 
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:4200",
     "http://127.0.0.1:4200",
+    "http://localhost:53587",
+    "http://127.0.0.1:53587",
 ]
 
 # Cho phép session cookie gửi khi FE (127.0.0.1:4200) gọi BE (127.0.0.1:8000)

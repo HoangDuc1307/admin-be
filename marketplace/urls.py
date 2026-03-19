@@ -6,6 +6,7 @@ from .views import (
     AdminListingViewSet,
     AdminUserViewSet,
     AdminReportViewSet,
+    AdminAuditLogViewSet,
     dashboard_summary,
     dashboard_timeseries,
     dashboard_data,
@@ -15,12 +16,14 @@ from .views import (
     save_fees_report,
     export_dashboard_report_csv,
     export_fees_report_csv,
+    admin_notifications,
 )
 
 router = DefaultRouter()
 router.register(r'listings', AdminListingViewSet, basename='admin-listings')
 router.register(r'users', AdminUserViewSet, basename='admin-users')
 router.register(r'reports', AdminReportViewSet, basename='admin-reports')
+router.register(r'logs', AdminAuditLogViewSet, basename='admin-logs')
 
 urlpatterns = [
     path('', include(router.urls)),
@@ -29,6 +32,7 @@ urlpatterns = [
     path('dashboard/timeseries/', dashboard_timeseries, name='dashboard-timeseries'),
     path('dashboard/', dashboard_data, name='dashboard-data'),
     path('dashboard/save-report/', save_dashboard_report, name='save-dashboard-report'),
+    path('dashboard/notifications/', admin_notifications, name='admin-notifications'),
     path('dashboard/export-report/', export_dashboard_report_csv, name='export-dashboard-report'),
     path('fees/statistics/', fee_statistics, name='fees-statistics'),
     path('fees/top-transactions/', fee_top_transactions, name='fees-top-transactions'),
