@@ -7,6 +7,10 @@ Bảng điều khiển (Dashboard) - Thống kê tổng quan hệ thống.
 """
 from datetime import timedelta
 import csv
+import io
+import os
+from openpyxl import Workbook
+from openpyxl.styles import Font, Alignment
 
 from django.contrib.auth.models import User
 from django.db.models import Sum, Count
@@ -59,19 +63,21 @@ def admin_notifications(request):
         'items': notifications
     })
 
-
 @api_view(['POST'])
 @permission_classes([IsAdminUser])
 def save_dashboard_report(request):
     """Lưu báo cáo dashboard: summary và timeseries vào AdminReportSnapshot."""
     summary_data = request.data.get('summary') or {}
     timeseries_data = request.data.get('timeseries') or {}
+    
+    # 2. Lưu vào Database (giữ lại snapshot)
     AdminReportSnapshot.objects.create(
         report_type='DASHBOARD',
         snapshot_data={'summary': summary_data, 'timeseries': timeseries_data},
         created_by=request.user,
     )
-    return Response({'status': 'saved', 'message': 'Đã lưu báo cáo dashboard.'})
+
+    return Response({'status': 'saved', 'message': 'Đã lưu hệ thống (snapshot) thành công.'})
 
 
 @api_view(['GET'])
@@ -125,32 +131,49 @@ def export_dashboard_report_csv(request):
         for row in txs_qs
     }
 
-    filename = f"dashboard-report-{today.isoformat()}.csv"
-    response = HttpResponse(content_type='text/csv; charset=utf-8')
-    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    filename = f"dashboard-report-{today.isoformat()}"
+    
+    # Khởi tạo file Excel
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Dashboard Report"
 
-    writer = csv.writer(response)
+    # Style cho font và căn lề
+    title_font = Font(bold=True, size=14)
+    header_font = Font(bold=True)
+    center_align = Alignment(horizontal='center')
 
-    # Phần 1: Summary
-    writer.writerow(['BÁO CÁO DASHBOARD'])
-    writer.writerow(['Số ngày', days])
-    writer.writerow([])
-    writer.writerow(['Chỉ số', 'Giá trị'])
-    writer.writerow(['Tổng người dùng', total_users])
-    writer.writerow(['Tổng bài đăng', total_listings])
-    writer.writerow(['Tổng giao dịch', total_transactions])
-    writer.writerow(['Tổng doanh thu', float(total_revenue)])
-    writer.writerow([f'Bài đăng {days} ngày gần nhất', listings_last_n_days])
-    writer.writerow([f'Giao dịch {days} ngày gần nhất', transactions_last_n_days])
+    # Đổ dữ liệu tổng quan (Summary)
+    ws.append(['BÁO CÁO DASHBOARD'])
+    ws['A1'].font = title_font
+    ws.append(['Số ngày', days])
+    ws.append([])
+    ws.append(['Chỉ số', 'Giá trị'])
+    # In đậm header
+    for cell in ws[4]: 
+        cell.font = header_font
 
-    # Phần 2: Timeseries
-    writer.writerow([])
-    writer.writerow(['DỮ LIỆU THEO NGÀY'])
-    writer.writerow(['Ngày', 'Số bài đăng mới', 'Số giao dịch', 'Doanh thu', 'Phí sàn'])
+    ws.append(['Tổng người dùng', total_users])
+    ws.append(['Tổng bài đăng', total_listings])
+    ws.append(['Tổng giao dịch', total_transactions])
+    ws.append(['Tổng doanh thu', float(total_revenue)])
+    ws.append([f'Bài đăng {days} ngày gần nhất', listings_last_n_days])
+    ws.append([f'Giao dịch {days} ngày gần nhất', transactions_last_n_days])
+
+    # Đổ dữ liệu chi tiết theo ngày (Timeseries)
+    ws.append([])
+    ws.append(['DỮ LIỆU THEO NGÀY'])
+    start_ts_row = ws.max_row
+    ws.cell(row=start_ts_row, column=1).font = title_font
+    
+    ws.append(['Ngày', 'Số bài đăng mới', 'Số giao dịch', 'Doanh thu', 'Phí sàn'])
+    for cell in ws[ws.max_row]:
+        cell.font = header_font
+
     for label in labels:
         listing_count = listing_map.get(label, 0)
         tx_data = tx_map.get(label, {})
-        writer.writerow([
+        ws.append([
             label,
             listing_count,
             tx_data.get('count', 0),
@@ -158,6 +181,25 @@ def export_dashboard_report_csv(request):
             tx_data.get('fee', 0),
         ])
 
+    # Tự động căn chỉnh độ rộng cột cho dễ nhìn
+    for col in ws.columns:
+        max_length = 0
+        column = col[0].column_letter # Get the column name
+        for cell in col:
+            try:
+                if len(str(cell.value)) > max_length:
+                    max_length = len(str(cell.value))
+            except:
+                pass
+        adjusted_width = (max_length + 2)
+        ws.column_dimensions[column].width = adjusted_width
+
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="{filename}.xlsx"'
+    wb.save(response)
+    
     return response
 
 

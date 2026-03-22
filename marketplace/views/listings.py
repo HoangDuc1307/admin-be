@@ -10,16 +10,16 @@ from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 
 from ..models import Listing, AdminAuditLog
-from ..serializers import ListingSerializer # Import serializer để chuyển đổi dữ liệu bài đăng
+from ..serializers import ListingSerializer # Chuyển đổi data bài đăng
 
-# ViewSet dành cho việc kiểm duyệt các bài đăng sản phẩm
+# Viewset duyệt tin
 class AdminListingViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Listing.objects.all().order_by('-created_at')
     serializer_class = ListingSerializer
     permission_classes = [IsAdminUser]
 
     def get_queryset(self):
-        """Lấy danh sách bài đăng, luôn sắp xếp theo ID để dễ quản lý."""
+        # Lọc tin theo status nếu có param, mặc định vẫn theo ID cho dễ nhìn
         status_param = self.request.query_params.get('status')
         qs = Listing.objects.all()
         if status_param:
@@ -28,12 +28,12 @@ class AdminListingViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
-        """Phê duyệt bài đăng cho phép hiển thị lên chợ."""
+        # Duyệt tin để hiện lên chợ
         listing = self.get_object()
         listing.status = 'APPROVED'
         listing.save()
 
-        # Lưu lại nhật ký Admin đã duyệt bài
+        # Log lại audit cho admin
         AdminAuditLog.objects.create(
             admin=request.user,
             action='APPROVE_LISTING',
@@ -46,14 +46,14 @@ class AdminListingViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=True, methods=['post'])
     def reject(self, request, pk=None):
-        """Từ chối bài đăng nếu vi phạm chính sách."""
+        # Từ chối tin vi phạm
         listing = self.get_object()
         reason = request.data.get('reason', 'Không có lý do')
         listing.status = 'REJECTED'
         listing.reject_reason = reason
         listing.save()
 
-        # Lưu lại nhật ký Admin đã từ chối bài và lý do
+        # Log audit kèm lý do từ chối
         AdminAuditLog.objects.create(
             admin=request.user,
             action='REJECT_LISTING',

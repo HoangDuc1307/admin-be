@@ -18,7 +18,7 @@ class AdminReportViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=True, methods=['post'])
     def set_status(self, request, pk=None):
-        """Đổi trạng thái báo cáo (Mở, Đang xử lý, Đã giải quyết, Từ chối)."""
+        # Đổi nhanh trạng thái báo cáo (Open/Resolved/etc.)
         report = self.get_object()
         status_value = request.data.get('status')
         if status_value not in dict(UserReport.REPORT_STATUS):
@@ -29,18 +29,13 @@ class AdminReportViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=True, methods=['post'])
     def resolve(self, request, pk=None):
-        """
-        Action chính để Admin xử lý một báo cáo vi phạm:
-        - Lưu lại nội dung phản hồi (admin_reply).
-        - Cập nhật trạng thái báo cáo (Ví dụ: Đã giải quyết).
-        - Thực hiện các hình thức kỷ luật: Cảnh cáo (Warn) hoặc Khóa (Block).
-        """
+        # Xử lý report: Phản hồi + Kỷ luật user (Warn/Block)
         report = self.get_object()
         admin_reply = request.data.get('admin_reply', '')
         resolution_status = request.data.get('status', 'RESOLVED')
         action_type = request.data.get('action') # Các tùy chọn: 'WARN', 'BLOCK', 'NONE'
 
-        # 1. Cập nhật dữ liệu vào bảng Báo cáo
+        # 1. Update status và reply của admin
         report.admin_reply = admin_reply
         report.status = resolution_status
         report.save()
@@ -48,7 +43,7 @@ class AdminReportViewSet(viewsets.ReadOnlyModelViewSet):
         target_user = report.target_user
         details = f"Đã xử lý báo cáo #{report.id}. Giải quyết: {admin_reply}."
 
-        # 2. Thực hiện xử phạt nếu Admin chọn
+        # 2. Xử phạt phụ thuộc vào lựa chọn của admin
         if action_type == 'WARN':
             profile = target_user.userprofile
             profile.warning_count += 1
@@ -62,7 +57,7 @@ class AdminReportViewSet(viewsets.ReadOnlyModelViewSet):
             target_user.save()
             details += " Hành động: Khóa tài khoản vĩnh viễn."
 
-        # 3. Lưu vào Nhật ký Admin (Audit Log)
+        # 3. Log audit action của admin
         AdminAuditLog.objects.create(
             admin=request.user,
             action='RESOLVE_REPORT',

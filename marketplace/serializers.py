@@ -69,4 +69,5 @@ class TransactionListSerializer(serializers.Serializer):
     created_at = serializers.DateTimeField(read_only=True)
     listing_title = serializers.CharField(source='listing.title', read_only=True)
     buyer_username = serializers.CharField(source='buyer.username', read_only=True)
+    seller_username = serializers.CharField(source='seller.username', read_only=True)
 

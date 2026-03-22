@@ -13,7 +13,7 @@ from rest_framework.response import Response
 from ..models import UserProfile, AdminAuditLog, Listing, Transaction, UserReport
 from ..serializers import UserSerializer, ListingSerializer, TransactionListSerializer, UserReportSerializer
 
-# ViewSet quản lý người dùng
+# Viewset quản lý user (Admin)
 class AdminUserViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = User.objects.all().order_by('id')
     serializer_class = UserSerializer
@@ -21,7 +21,7 @@ class AdminUserViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=True, methods=['post'])
     def block(self, request, pk=None):
-        """Hàm thực hiện khóa tài khoản người dùng."""
+        # Khóa tài khoản vĩnh viễn
         user = self.get_object()
         profile, _ = UserProfile.objects.get_or_create(user=user)
         profile.is_blocked = True
@@ -29,7 +29,7 @@ class AdminUserViewSet(viewsets.ReadOnlyModelViewSet):
         user.is_active = False
         user.save()
 
-        # Lưu vết hành động khóa user
+        # Log audit lại cho admin
         AdminAuditLog.objects.create(
             admin=request.user,
             action='BLOCK_USER',
@@ -42,7 +42,7 @@ class AdminUserViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=True, methods=['post'])
     def unblock(self, request, pk=None):
-        """Hàm thực hiện mở khóa lại tài khoản."""
+        # Mở khóa lại tài khoản
         user = self.get_object()
         profile, _ = UserProfile.objects.get_or_create(user=user)
         profile.is_blocked = False
@@ -50,7 +50,7 @@ class AdminUserViewSet(viewsets.ReadOnlyModelViewSet):
         user.is_active = True
         user.save()
 
-        # Lưu vết hành động mở khóa
+        # Log audit lại cho admin
         AdminAuditLog.objects.create(
             admin=request.user,
             action='UNBLOCK_USER',
@@ -63,12 +63,7 @@ class AdminUserViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=True, methods=['get'])
     def activity(self, request, pk=None):
-        """
-        API tổng hợp toàn bộ lịch sử hoạt động của một User để Admin tiện theo dõi:
-        - Danh sách bài đăng.
-        - Lịch sử mua hàng / bán hàng.
-        - Các báo cáo vi phạm liên quan.
-        """
+        # Tổng hợp full lịch sử của user (tin đăng, mua/bán, report) cho admin check
         user = self.get_object()
         listings = Listing.objects.filter(seller=user).order_by('-created_at')
         purchases = Transaction.objects.filter(buyer=user).order_by('-created_at')

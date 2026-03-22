@@ -10,7 +10,7 @@ class Command(BaseCommand):
     def handle(self, *args, **kwargs):
         self.stdout.write(self.style.SUCCESS('--- Starting sample data setup ---'))
 
-        # 1. Tạo tài khoản Admin (Mật khẩu: admin123)
+        # Tạo acc admin (pass: admin123)
         admin_user, created = User.objects.get_or_create(
             username='admin',
             defaults={'is_staff': True, 'is_superuser': True}
@@ -20,7 +20,7 @@ class Command(BaseCommand):
             admin_user.save()
             self.stdout.write(self.style.SUCCESS('Created Admin: admin / admin123'))
 
-        # 2. Tạo 10 người dùng mẫu
+        # Tạo 10 user mẫu
         users = []
         for i in range(1, 11):
             user, created = User.objects.get_or_create(
@@ -34,7 +34,7 @@ class Command(BaseCommand):
             users.append(user)
         self.stdout.write(self.style.SUCCESS(f'Created {len(users)} sample users.'))
 
-        # 3. Danh sách các mặt hàng mẫu (tiếng Việt cho thực tế)
+        # List tên sản phẩm TV cho thật
         titles = [
             'Laptop Dell Latitude 7490 cu', 'iPhone 13 Pro Max 256GB', 'Tay cam PS5 DualSense', 
             'Ban phim co AKKO 3068', 'Man hinh Dell UltraSharp 24', 'Tai nghe Sony WH-1000XM4',
@@ -42,7 +42,7 @@ class Command(BaseCommand):
             'Loa Bluetooth Marshall Emberton', 'iPad Air 5 M1', 'Sach Clean Code (Tieng Viet)'
         ]
 
-        # 4. Tạo các bài đăng mẫu
+        # Tạo tin đăng mẫu cho đa dạng trạng thái
         listings = []
         for i in range(20):
             title = random.choice(titles) + f" #{i+1}"
@@ -58,7 +58,7 @@ class Command(BaseCommand):
             listings.append(listing)
         self.stdout.write(self.style.SUCCESS(f'Created {len(listings)} listings.'))
 
-        # 5. Tạo một số giao dịch mẫu
+        # Tạo vài giao dịch mẫu (chỉ lấy tin đã duyệt)
         for i in range(5):
             listing = random.choice([l for l in listings if l.status == 'APPROVED'])
             buyer = random.choice([u for u in users if u != listing.seller])
@@ -71,7 +71,7 @@ class Command(BaseCommand):
             )
         self.stdout.write(self.style.SUCCESS('Created 5 transactions.'))
 
-        # 6. Tạo một số báo cáo mẫu có kèm minh chứng
+        # Tạo report mẫu kèm bằng chứng demo
         for i in range(3):
             reporter = random.choice(users)
             target = random.choice([u for u in users if u != reporter])

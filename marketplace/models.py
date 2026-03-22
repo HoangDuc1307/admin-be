@@ -1,9 +1,9 @@
 from django.db import models
 from django.contrib.auth.models import User
 
-# File này định nghĩa các bảng trong Cơ sở dữ liệu (Database)
-
-# 1. Model Bài đăng (Listing): Lưu thông tin sản phẩm người dùng rao bán
+# Định nghĩa các bảng Database
+ 
+# Tin đăng (Listing)
 class Listing(models.Model):
     STATUS_CHOICES = [
         ('PENDING', 'Đang chờ duyệt'),
@@ -21,20 +21,20 @@ class Listing(models.Model):
     def __str__(self) -> str:
         return self.title
 
-# 2. Model Ảnh bài đăng: Một bài đăng có thể có nhiều ảnh
+# Ảnh sản phẩm (Một tin có thể có nhiều ảnh)
 class ListingImage(models.Model):
     listing = models.ForeignKey(Listing, on_delete=models.CASCADE, related_name='images')
     image = models.ImageField(upload_to='listing_images/')
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
-# 3. Model Lịch sử giá: Lưu lại mỗi khi người dùng thay đổi giá
+# Lịch sử đổi giá (Dùng để vẽ chart)
 class PriceHistory(models.Model):
     listing = models.ForeignKey(Listing, on_delete=models.CASCADE, related_name='price_history')
     old_price = models.DecimalField(max_digits=12, decimal_places=2)
     new_price = models.DecimalField(max_digits=12, decimal_places=2)
     changed_at = models.DateTimeField(auto_now_add=True)
 
-# 4. Model Báo cáo vi phạm (User Report): Người dùng tố cáo lẫn nhau
+# Báo cáo / Khiếu nại (Report)
 class UserReport(models.Model):
     REPORT_STATUS = [
         ('OPEN', 'Mới'),
@@ -53,13 +53,13 @@ class UserReport(models.Model):
     def __str__(self) -> str:
         return f"Report {self.id} on {self.target_user.username}"
 
-# 5. Model Ảnh minh chứng báo cáo: Người tố cáo gửi ảnh bằng chứng
+# Ảnh bằng chứng cho report
 class ReportEvidence(models.Model):
     report = models.ForeignKey(UserReport, on_delete=models.CASCADE, related_name='evidences')
     image = models.ImageField(blank=True, null=True, upload_to='report_evidences/')
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
-# 6. Model Giao dịch (Transaction): Lưu thông tin khi mua bán thành công
+# Giao dịch thành công (Transaction)
 class Transaction(models.Model):
     listing = models.ForeignKey(Listing, on_delete=models.CASCADE)
     buyer = models.ForeignKey(User, on_delete=models.CASCADE, related_name='purchases')
@@ -71,7 +71,7 @@ class Transaction(models.Model):
     def __str__(self) -> str:
         return f"Transaction {self.id}"
 
-# 7. Model Thông tin thêm của User: Trạng thái bị khóa, số lần bị cảnh cáo
+# Profile phụ: Lưu trạng thái khóa/cảnh cáo user
 class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     is_blocked = models.BooleanField(default=False)
@@ -80,7 +80,7 @@ class UserProfile(models.Model):
     def __str__(self) -> str:
         return f"Profile of {self.user.username}"
 
-# 8. Model Snapshot Báo cáo: Lưu lại số liệu Dashboard tại một thời điểm
+# Snapshot: Lưu lại data dashboard (phục vụ thống kê sau này)
 class AdminReportSnapshot(models.Model):
     TYPE_CHOICES = [
         ('DASHBOARD', 'Dashboard'),
@@ -94,8 +94,7 @@ class AdminReportSnapshot(models.Model):
     def __str__(self) -> str:
         return f"{self.get_report_type_display()} - {self.created_at}"
 
-# 9. Model Nhật ký hoạt động của Admin (Audit Log)
-# Lưu lại lịch sử các thao tác quan trọng để đối soát
+# Nhật ký Admin (Audit Log) để kiểm soát hành động admin
 class AdminAuditLog(models.Model):
     admin = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='audit_logs')
     action = models.CharField(max_length=100) # Tên hành động (Vd: Khóa user, Duyệt bài)

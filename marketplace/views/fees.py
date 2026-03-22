@@ -7,6 +7,10 @@ Thống kê phí sàn (Fees) - Báo cáo doanh thu và phí sàn từ giao dịc
 """
 from datetime import timedelta
 import csv
+import io
+import os
+from openpyxl import Workbook
+from openpyxl.styles import Font, Alignment
 
 from django.db.models import Sum, Count
 from django.http import HttpResponse
@@ -25,12 +29,15 @@ def save_fees_report(request):
     """Lưu báo cáo phí sàn: stats và timeseries vào AdminReportSnapshot."""
     stats_data = request.data.get('stats') or {}
     timeseries_data = request.data.get('timeseries') or {}
+    
+    # 2. Lưu vào Database (snapshot)
     AdminReportSnapshot.objects.create(
         report_type='FEES',
         snapshot_data={'stats': stats_data, 'timeseries': timeseries_data},
         created_by=request.user,
     )
-    return Response({'status': 'saved', 'message': 'Đã lưu báo cáo phí sàn.'})
+
+    return Response({'status': 'saved', 'message': 'Đã lưu snapshot báo cáo phí sàn.'})
 
 
 @api_view(['GET'])
@@ -136,42 +143,60 @@ def export_fees_report_csv(request):
     top_qs = Transaction.objects.select_related('listing', 'buyer').order_by('-platform_fee')[:5]
     top_serializer = TransactionListSerializer(top_qs, many=True)
 
-    filename = f"fees-report-{today.isoformat()}.csv"
-    response = HttpResponse(content_type='text/csv; charset=utf-8')
-    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    filename = f"fees-report-{today.isoformat()}"
+    
+    # Khởi tạo workbook Excel
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Fees Report"
 
-    writer = csv.writer(response)
+    # Định dạng font cơ bản
+    title_font = Font(bold=True, size=14)
+    header_font = Font(bold=True)
 
     # Phần 1: Summary
-    writer.writerow(['BÁO CÁO PHÍ SÀN'])
-    writer.writerow(['Số ngày', days])
-    writer.writerow([])
-    writer.writerow(['Chỉ số', 'Giá trị'])
-    writer.writerow(['Tổng doanh thu', float(summary['total_revenue'] or 0)])
-    writer.writerow(['Tổng phí sàn', float(summary['total_platform_fee'] or 0)])
-    writer.writerow(['Tổng giao dịch', summary['total_transactions'] or 0])
-    writer.writerow([f'Doanh thu {days} ngày gần nhất', rev_n])
-    writer.writerow([f'Phí sàn {days} ngày gần nhất', fee_n])
-    writer.writerow(['Phí trung bình mỗi giao dịch', avg_fee])
+    ws.append(['BÁO CÁO PHÍ SÀN'])
+    ws['A1'].font = title_font
+    ws.append(['Số ngày', days])
+    ws.append([])
+    ws.append(['Chỉ số', 'Giá trị'])
+    # In đậm hàng tiêu đề
+    for cell in ws[4]:
+        cell.font = header_font
 
-    # Phần 2: Timeseries
-    writer.writerow([])
-    writer.writerow(['DỮ LIỆU THEO NGÀY'])
-    writer.writerow(['Ngày', 'Doanh thu', 'Phí sàn'])
+    ws.append(['Tổng doanh thu', float(summary['total_revenue'] or 0)])
+    ws.append(['Tổng phí sàn', float(summary['total_platform_fee'] or 0)])
+    ws.append(['Tổng giao dịch', summary['total_transactions'] or 0])
+    ws.append([f'Doanh thu {days} ngày gần nhất', rev_n])
+    ws.append([f'Phí sàn {days} ngày gần nhất', fee_n])
+    ws.append(['Phí trung bình mỗi giao dịch', avg_fee])
+
+    # Đổ data theo ngày (Timeseries)
+    ws.append([])
+    ws.append(['DỮ LIỆU THEO NGÀY'])
+    ws.cell(row=ws.max_row, column=1).font = title_font
+    ws.append(['Ngày', 'Doanh thu', 'Phí sàn'])
+    for cell in ws[ws.max_row]:
+        cell.font = header_font
+
     for label in labels:
         tx_data = tx_map.get(label, {})
-        writer.writerow([
+        ws.append([
             label,
             tx_data.get('revenue', 0),
             tx_data.get('fee', 0),
         ])
 
-    # Phần 3: Top transactions
-    writer.writerow([])
-    writer.writerow(['TOP 5 GIAO DỊCH CÓ PHÍ CAO NHẤT'])
-    writer.writerow(['ID', 'Bài đăng', 'Người mua', 'Số tiền', 'Phí sàn', 'Ngày'])
+    # Top 5 giao dịch có phí cao nhất
+    ws.append([])
+    ws.append(['TOP 5 GIAO DỊCH CÓ PHÍ CAO NHẤT'])
+    ws.cell(row=ws.max_row, column=1).font = title_font
+    ws.append(['ID', 'Bài đăng', 'Người mua', 'Số tiền', 'Phí sàn', 'Ngày'])
+    for cell in ws[ws.max_row]:
+        cell.font = header_font
+
     for row in top_serializer.data:
-        writer.writerow([
+        ws.append([
             row['id'],
             row['listing_title'],
             row['buyer_username'],
@@ -180,4 +205,22 @@ def export_fees_report_csv(request):
             row['created_at'],
         ])
 
+    # Auto fix độ rộng cột cho đẹp
+    for col in ws.columns:
+        max_length = 0
+        column = col[0].column_letter
+        for cell in col:
+            try:
+                if len(str(cell.value)) > max_length:
+                    max_length = len(str(cell.value))
+            except:
+                pass
+        ws.column_dimensions[column].width = max_length + 2
+
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="{filename}.xlsx"'
+    wb.save(response)
+    
     return response

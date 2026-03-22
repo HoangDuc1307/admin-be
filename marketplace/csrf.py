@@ -8,5 +8,6 @@ from rest_framework.permissions import AllowAny
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def csrf(request):
+    # Trả về cookie CSRF cho frontend
     return JsonResponse({"detail": "CSRF cookie set"})
 
