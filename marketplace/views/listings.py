@@ -1,8 +1,5 @@
 """
-Duyệt bài đăng (Listings) - Admin duyệt hoặc từ chối tin đăng.
-- GET list: danh sách bài đăng (?status=PENDING|APPROVED|REJECTED để lọc)
-- approve: POST /id/approve/ → status=APPROVED
-- reject: POST /id/reject/ → status=REJECTED
+Duyệt bài đăng (Listings) - Cho phép Admin duyệt hoặc bác bỏ tin đăng của người dùng.
 """
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -10,16 +7,16 @@ from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 
 from ..models import Listing, AdminAuditLog
-from ..serializers import ListingSerializer # Chuyển đổi data bài đăng
+from ..serializers import ListingSerializer
 
-# Viewset duyệt tin
+# Xử lý duyệt tin của admin
 class AdminListingViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Listing.objects.all().order_by('-created_at')
     serializer_class = ListingSerializer
     permission_classes = [IsAdminUser]
 
     def get_queryset(self):
-        # Lọc tin theo status nếu có param, mặc định vẫn theo ID cho dễ nhìn
+        # Lọc nhanh theo trạng thái (Duyệt/Chờ/Từ chối) nếu truyền param lên
         status_param = self.request.query_params.get('status')
         qs = Listing.objects.all()
         if status_param:
@@ -28,12 +25,12 @@ class AdminListingViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
-        # Duyệt tin để hiện lên chợ
+        # Duyệt xong là tin được đẩy lên chợ luôn
         listing = self.get_object()
         listing.status = 'APPROVED'
         listing.save()
 
-        # Log lại audit cho admin
+        # Lưu lại nhật ký để sau này biết ai đã duyệt cái tin này
         AdminAuditLog.objects.create(
             admin=request.user,
             action='APPROVE_LISTING',
@@ -46,14 +43,14 @@ class AdminListingViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=True, methods=['post'])
     def reject(self, request, pk=None):
-        # Từ chối tin vi phạm
+        # Từ chối nếu tin vi phạm quy định, bắt buộc phải có lý do gửi cho chủ tin
         listing = self.get_object()
-        reason = request.data.get('reason', 'Không có lý do')
+        reason = request.data.get('reason', 'Không có lý do cụ thể')
         listing.status = 'REJECTED'
         listing.reject_reason = reason
         listing.save()
 
-        # Log audit kèm lý do từ chối
+        # Log audit kèm lý do từ chối để đối soát khi cần
         AdminAuditLog.objects.create(
             admin=request.user,
             action='REJECT_LISTING',

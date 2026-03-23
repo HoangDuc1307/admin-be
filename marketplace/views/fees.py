@@ -1,9 +1,5 @@
 """
-Thống kê phí sàn (Fees) - Báo cáo doanh thu và phí sàn từ giao dịch.
-- statistics: tổng revenue, phí, tx + theo N ngày (?days=7|14|30)
-- top_transactions: 5 giao dịch có phí cao nhất
-- save: lưu snapshot báo cáo (report_type=FEES)
-- export: xuất báo cáo phí sàn ra file (mở được bằng Excel)
+Thống kê phí sàn (Fees) - Theo dõi doanh thu và các khoản phí thu được từ giao dịch.
 """
 from datetime import timedelta
 import csv
@@ -19,22 +15,31 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 
-from ..models import Transaction, AdminReportSnapshot
+from ..models import Transaction, AdminReportSnapshot, AdminAuditLog
 from ..serializers import TransactionListSerializer
 
 
 @api_view(['POST'])
 @permission_classes([IsAdminUser])
 def save_fees_report(request):
-    """Lưu báo cáo phí sàn: stats và timeseries vào AdminReportSnapshot."""
+    """Lưu lại snapshot báo cáo phí sàn để làm dữ liệu đối soát sau này."""
     stats_data = request.data.get('stats') or {}
     timeseries_data = request.data.get('timeseries') or {}
     
-    # 2. Lưu vào Database (snapshot)
-    AdminReportSnapshot.objects.create(
+    # Cất vào database
+    snapshot = AdminReportSnapshot.objects.create(
         report_type='FEES',
         snapshot_data={'stats': stats_data, 'timeseries': timeseries_data},
         created_by=request.user,
+    )
+
+    # Note lại hành động của admin
+    AdminAuditLog.objects.create(
+        admin=request.user,
+        action='SAVE_FEES_REPORT',
+        details="Đã lưu snapshot báo cáo phí sàn.",
+        target_model="AdminReportSnapshot",
+        target_id=str(snapshot.id)
     )
 
     return Response({'status': 'saved', 'message': 'Đã lưu snapshot báo cáo phí sàn.'})
@@ -43,22 +48,24 @@ def save_fees_report(request):
 @api_view(['GET'])
 @permission_classes([IsAdminUser])
 def fee_statistics(request):
-    """GET ?days=N: Tổng revenue, phí, tx + revenue/phí N ngày gần nhất, phí TB/giao dịch."""
+    """Lấy tổng hợp số liệu về doanh thu, phí sàn và số lượng giao dịch."""
     days = int(request.query_params.get('days', 7))
     if days < 1:
         days = 7
     if days > 90:
         days = 90
 
-    now = timezone.now()
-    since = now - timedelta(days=days)
+    today = timezone.localdate()
+    start_date = today - timedelta(days=days - 1)
 
+    # Tính toán tổng doanh thu và phí từ trước đến nay
     summary = Transaction.objects.aggregate(
         total_revenue=Sum('amount'),
         total_platform_fee=Sum('platform_fee'),
         total_transactions=Count('id'),
     )
-    last_n = Transaction.objects.filter(created_at__gte=since).aggregate(
+    # Tính riêng cho khoảng thời gian admin đang xem
+    last_n = Transaction.objects.filter(created_at__date__gte=start_date).aggregate(
         rev=Sum('amount'),
         fee=Sum('platform_fee'),
     )
@@ -83,7 +90,7 @@ def fee_statistics(request):
 @api_view(['GET'])
 @permission_classes([IsAdminUser])
 def fee_top_transactions(request):
-    """Lấy 5 giao dịch có phí sàn cao nhất."""
+    """Show nhanh 5 giao dịch 'khủng' nhất (phí cao nhất)."""
     qs = Transaction.objects.select_related('listing', 'buyer').order_by('-platform_fee')[:5]
     serializer = TransactionListSerializer(qs, many=True)
     return Response(serializer.data)
@@ -93,12 +100,7 @@ def fee_top_transactions(request):
 @permission_classes([IsAdminUser])
 def export_fees_report_csv(request):
     """
-    Xuất báo cáo phí sàn ra file CSV để tải về (mở bằng Excel).
-
-    File gồm:
-    - Tổng quan phí sàn (fee_statistics)
-    - Timeseries (doanh thu & phí sàn theo ngày)
-    - Top 5 giao dịch có phí cao nhất
+    Xuất file Excel báo cáo phí sàn. Show cả tổng quan, chi tiết theo ngày và top giao dịch.
     """
     days = int(request.query_params.get('days', 7))
     if days < 1:
@@ -111,6 +113,7 @@ def export_fees_report_csv(request):
     today = timezone.localdate()
     start_date = today - timedelta(days=days - 1)
 
+    # Gom số liệu tổng quát
     summary = Transaction.objects.aggregate(
         total_revenue=Sum('amount'),
         total_platform_fee=Sum('platform_fee'),
@@ -126,6 +129,7 @@ def export_fees_report_csv(request):
     fee_total = summary['total_platform_fee'] or 0
     avg_fee = float(fee_total / cnt) if cnt else 0
 
+    # Gom số liệu theo từng ngày
     txs_qs = (
         Transaction.objects.filter(created_at__date__gte=start_date)
         .values('created_at')
@@ -140,27 +144,28 @@ def export_fees_report_csv(request):
         for row in txs_qs
     }
 
+    # Gom list Top 5
     top_qs = Transaction.objects.select_related('listing', 'buyer').order_by('-platform_fee')[:5]
     top_serializer = TransactionListSerializer(top_qs, many=True)
 
     filename = f"fees-report-{today.isoformat()}"
     
-    # Khởi tạo workbook Excel
+    # Khởi tạo file Excel bằng openpyxl
     wb = Workbook()
     ws = wb.active
     ws.title = "Fees Report"
 
-    # Định dạng font cơ bản
+    # Định dạng font cho tiêu đề
     title_font = Font(bold=True, size=14)
     header_font = Font(bold=True)
 
-    # Phần 1: Summary
+    # PHẦN 1: Bảng tổng quan (Summary)
     ws.append(['BÁO CÁO PHÍ SÀN'])
     ws['A1'].font = title_font
     ws.append(['Số ngày', days])
     ws.append([])
     ws.append(['Chỉ số', 'Giá trị'])
-    # In đậm hàng tiêu đề
+    # In đậm hàng header
     for cell in ws[4]:
         cell.font = header_font
 
@@ -171,7 +176,7 @@ def export_fees_report_csv(request):
     ws.append([f'Phí sàn {days} ngày gần nhất', fee_n])
     ws.append(['Phí trung bình mỗi giao dịch', avg_fee])
 
-    # Đổ data theo ngày (Timeseries)
+    # PHẦN 2: Dữ liệu chi tiết từng ngày (Timeseries)
     ws.append([])
     ws.append(['DỮ LIỆU THEO NGÀY'])
     ws.cell(row=ws.max_row, column=1).font = title_font
@@ -187,7 +192,7 @@ def export_fees_report_csv(request):
             tx_data.get('fee', 0),
         ])
 
-    # Top 5 giao dịch có phí cao nhất
+    # PHẦN 3: Danh sách 5 giao dịch có phí sàn cao nhất
     ws.append([])
     ws.append(['TOP 5 GIAO DỊCH CÓ PHÍ CAO NHẤT'])
     ws.cell(row=ws.max_row, column=1).font = title_font
@@ -205,7 +210,7 @@ def export_fees_report_csv(request):
             row['created_at'],
         ])
 
-    # Auto fix độ rộng cột cho đẹp
+    # Tự động chỉnh độ rộng cột nhìn cho đẹp
     for col in ws.columns:
         max_length = 0
         column = col[0].column_letter

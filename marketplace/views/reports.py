@@ -25,39 +25,52 @@ class AdminReportViewSet(viewsets.ReadOnlyModelViewSet):
             return Response({'detail': 'Trạng thái không hợp lệ'}, status=status.HTTP_400_BAD_REQUEST)
         report.status = status_value
         report.save()
+
+        # Log audit action
+        AdminAuditLog.objects.create(
+            admin=request.user,
+            action='UPDATE_REPORT_STATUS',
+            details=f"Đã chuyển trạng thái báo cáo #{report.id} sang {status_value}.",
+            target_model="UserReport",
+            target_id=str(report.id)
+        )
         return Response(UserReportSerializer(report).data)
 
     @action(detail=True, methods=['post'])
     def resolve(self, request, pk=None):
-        # Xử lý report: Phản hồi + Kỷ luật user (Warn/Block)
+        """
+        Xử lý báo cáo: Phản hồi nhanh, tự động cảnh báo hoặc khóa luôn nếu cần.
+        """
         report = self.get_object()
         admin_reply = request.data.get('admin_reply', '')
         resolution_status = request.data.get('status', 'RESOLVED')
-        action_type = request.data.get('action') # Các tùy chọn: 'WARN', 'BLOCK', 'NONE'
+        action_type = request.data.get('action', 'NONE')
 
-        # 1. Update status và reply của admin
+        # Giữ lại trạng thái cũ để check, tránh trường hợp admin ấn giải quyết nhiều lần gây cộng dồn gậy
+        old_status = report.status
         report.admin_reply = admin_reply
         report.status = resolution_status
         report.save()
 
         target_user = report.target_user
-        details = f"Đã xử lý báo cáo #{report.id}. Giải quyết: {admin_reply}."
+        profile = target_user.userprofile
+        details = f"Đã xong báo cáo #{report.id} ({resolution_status}). Note: {admin_reply}."
 
-        # 2. Xử phạt phụ thuộc vào lựa chọn của admin
-        if action_type == 'WARN':
-            profile = target_user.userprofile
+        # Nếu tố cáo chuẩn (RESOLVED) thì tự động tặng 1 gậy cảnh báo cho user
+        if resolution_status == 'RESOLVED' and old_status != 'RESOLVED':
             profile.warning_count += 1
-            profile.save()
-            details += " Hành động: Cảnh cáo người dùng."
-        elif action_type == 'BLOCK':
-            profile = target_user.userprofile
+            details += " (Hệ thống tự động +1 cảnh báo)"
+        
+        # Tiện tay khóa vĩnh viễn luôn nếu admin tích chọn
+        if action_type == 'BLOCK':
             profile.is_blocked = True
-            profile.save()
-            target_user.is_active = False # Vừa khóa profile vừa vô hiệu hóa User của Django
+            target_user.is_active = False # Chặn đăng nhập luôn cho chắc
             target_user.save()
-            details += " Hành động: Khóa tài khoản vĩnh viễn."
+            details += " -> Đã khóa tài khoản."
+        
+        profile.save() # Lưu lại các thay đổi của profile (gậy, trạng thái khóa)
 
-        # 3. Log audit action của admin
+        # Lưu log để sau này còn biết ai là người "ra tay" xử lý cái report này
         AdminAuditLog.objects.create(
             admin=request.user,
             action='RESOLVE_REPORT',

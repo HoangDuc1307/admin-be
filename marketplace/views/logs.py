@@ -4,34 +4,34 @@ from rest_framework import serializers
 
 from ..models import AdminAuditLog
 
-# Serializer cho Nhật ký hoạt động: Giúp chuyển đổi dữ liệu log sang JSON để hiển thị ở Frontend
+# Chuyển đổi dữ liệu Log sang JSON để hiển thị lên bảng "Nhật ký hoạt động"
 class AdminAuditLogSerializer(serializers.ModelSerializer):
     admin_username = serializers.CharField(source='admin.username', read_only=True)
     target_object = serializers.SerializerMethodField()
 
     class Meta:
         model = AdminAuditLog
-        # Hiển thị các trường: ID, Người thực hiện, Hành động, Chi tiết, Đối tượng liên quan, Thời gian
+        # Hiển thị các cột: ID, Ai làm, Làm gì, Note chi tiết, Đối tượng nào, Lúc nào
         fields = ['id', 'admin_username', 'action', 'details', 'target_object', 'timestamp']
 
     def get_target_object(self, obj):
-        """Hàm xử lý hiển thị tên đối tượng bị tác động (Vd: Listing #5)"""
+        # Hiển thị tên đối tượng cho dễ hiểu (Ví dụ: Listing #12)
         if obj.target_model and obj.target_id:
             return f"{obj.target_model} #{obj.target_id}"
         return "N/A"
 
-# ViewSet quản trị Nhật ký hoạt động (Audit Log)
+# View quản lý Nhật ký hoạt động
 class AdminAuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     """
-    API cung cấp nhật ký hoạt động của Admin.
-    Dùng để theo dõi vết các thao tác thay đổi dữ liệu.
+    API để Admin xem lại toàn bộ lịch sử thao tác trên hệ thống. 
+    Giúp truy vết xem ai đã duyệt bài hoặc khóa user nào.
     """
     queryset = AdminAuditLog.objects.all().order_by('-timestamp')
     serializer_class = AdminAuditLogSerializer
     permission_classes = [IsAdminUser]
 
     def get_queryset(self):
-        """Hàm hỗ trợ lọc nhật ký theo loại hành động (Filter)"""
+        # Hỗ trợ lọc nhanh theo loại hành động (Ví dụ: chỉ xem log khóa user)
         qs = super().get_queryset()
         action_param = self.request.query_params.get('action')
         if action_param:

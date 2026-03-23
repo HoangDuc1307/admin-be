@@ -13,32 +13,35 @@ from rest_framework.response import Response
 from ..models import UserProfile, AdminAuditLog, Listing, Transaction, UserReport
 from ..serializers import UserSerializer, ListingSerializer, TransactionListSerializer, UserReportSerializer
 
-# Viewset quản lý user (Admin)
+# Quản lý người dùng - Lọc bớt Admin/Staff ra cho đỡ vướng mắt, tránh khóa nhầm đồng nghiệp
 class AdminUserViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = User.objects.all().order_by('id')
+    queryset = User.objects.filter(is_superuser=False, is_staff=False).order_by('id')
     serializer_class = UserSerializer
     permission_classes = [IsAdminUser]
 
-    @action(detail=True, methods=['post'])
     def block(self, request, pk=None):
-        # Khóa tài khoản vĩnh viễn
+        # Khóa tài khoản kèm lý do cụ thể
         user = self.get_object()
+        reason = request.data.get('reason', 'Không có lý do cụ thể')
+        
         profile, _ = UserProfile.objects.get_or_create(user=user)
         profile.is_blocked = True
+        profile.block_reason = reason
         profile.save()
+        
         user.is_active = False
         user.save()
-
+ 
         # Log audit lại cho admin
         AdminAuditLog.objects.create(
             admin=request.user,
             action='BLOCK_USER',
-            details=f"Đã khóa tài khoản người dùng @{user.username} (ID: {user.id})",
+            details=f"Đã khóa tài khoản người dùng @{user.username} (ID: {user.id}). Lý do: {reason}",
             target_model="User",
             target_id=str(user.id)
         )
-
-        return Response({'status': 'blocked'})
+ 
+        return Response({'status': 'blocked', 'reason': reason})
 
     @action(detail=True, methods=['post'])
     def unblock(self, request, pk=None):
