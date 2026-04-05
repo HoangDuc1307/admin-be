@@ -6,7 +6,6 @@ from .views import (
     AdminListingViewSet,
     AdminUserViewSet,
     AdminReportViewSet,
-    AdminAuditLogViewSet,
     dashboard_summary,
     dashboard_timeseries,
     dashboard_data,
@@ -23,7 +22,6 @@ router = DefaultRouter()
 router.register(r'listings', AdminListingViewSet, basename='admin-listings')
 router.register(r'users', AdminUserViewSet, basename='admin-users')
 router.register(r'reports', AdminReportViewSet, basename='admin-reports')
-router.register(r'logs', AdminAuditLogViewSet, basename='admin-logs')
 
 urlpatterns = [
     path('', include(router.urls)),

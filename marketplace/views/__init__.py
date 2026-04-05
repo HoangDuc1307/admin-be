@@ -13,7 +13,6 @@ from .dashboard import (
 from .listings import AdminListingViewSet
 from .users import AdminUserViewSet
 from .reports import AdminReportViewSet
-from .logs import AdminAuditLogViewSet
 from .fees import (
     save_fees_report,
     fee_statistics,
